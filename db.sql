@@ -1,3 +1,16 @@
+
+CREATE TABLE auditoria(
+    id SERIAL NOT NULL,
+    tabla varchar(50),
+    operacion varchar(20),
+    usuario_id integer,
+    fecha timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    datos_anteriores jsonb,
+    datos_nuevos jsonb,
+    PRIMARY KEY(id),
+    CONSTRAINT auditoria_usuario_id_fkey FOREIGN key(usuario_id) REFERENCES usuarios(id)
+);
+
 -- Clientes
 CREATE TABLE clientes (
 id SERIAL PRIMARY KEY,

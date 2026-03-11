@@ -38,6 +38,7 @@ const rutas = {
     tickets: require('./routes/tickets'),
     comentarios: require('./routes/comentarios'),
     adjuntos: require('./routes/adjuntos'),
+    auditoria: require('./routes/auditoria'),
 };
 
 // Session middleware opcional: lee x-session-token y pega usuario en req.user (solo informativo, no bloquea)
@@ -57,6 +58,7 @@ app.use('/api/usuarios', rutas.usuarios);
 app.use('/api/tickets', rutas.tickets);
 app.use('/api/comentarios', rutas.comentarios);
 app.use('/api/adjuntos', rutas.adjuntos);
+app.use('/api/auditoria', rutas.auditoria);
 
 // Middleware de manejo de errores
 app.use((err, req, res, next) => {

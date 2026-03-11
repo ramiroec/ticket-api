@@ -113,4 +113,72 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Obtener estadísticas del dashboard
+router.get('/stats/dashboard', async (req, res) => {
+  try {
+    // Total de tickets abiertos
+    const abiertosRes = await pool.query("SELECT COUNT(*) as total FROM tickets WHERE estado = 'Abierto'");
+    const totalAbiertos = abiertosRes.rows[0].total;
+
+    // Total de tickets críticos
+    const criticosRes = await pool.query("SELECT COUNT(*) as total FROM tickets WHERE urgencia = 'Crítica' OR urgencia = 'Alta'");
+    const totalCriticos = criticosRes.rows[0].total;
+
+    // Tickets por cliente
+    const porClienteRes = await pool.query(`
+      SELECT c.id, c.empresa, COUNT(t.id) as total_tickets
+      FROM clientes c
+      LEFT JOIN tickets t ON c.id = t.cliente_id
+      GROUP BY c.id, c.empresa
+      ORDER BY total_tickets DESC
+    `);
+
+    // Tickets por servicio (equipo)
+    const porServicioRes = await pool.query(`
+      SELECT s.id, s.nombre, COUNT(t.id) as total_tickets
+      FROM servicios s
+      LEFT JOIN tickets t ON s.id = t.servicio_id
+      GROUP BY s.id, s.nombre
+      ORDER BY total_tickets DESC
+    `);
+
+    // Productividad por técnico (tickets resueltos)
+    const productividadRes = await pool.query(`
+      SELECT u.id, u.nombre, 
+             COUNT(CASE WHEN t.estado = 'Resuelto' THEN 1 END) as resueltos,
+             COUNT(t.id) as total
+      FROM usuarios u
+      LEFT JOIN tickets t ON u.id = t.asignado_a
+      GROUP BY u.id, u.nombre
+      ORDER BY resueltos DESC
+    `);
+
+    // Total general de datos
+    const totalesRes = await pool.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM tickets) as total_tickets,
+        (SELECT COUNT(*) FROM clientes) as total_clientes,
+        (SELECT COUNT(*) FROM usuarios) as total_usuarios,
+        (SELECT COUNT(*) FROM servicios) as total_servicios
+    `);
+
+    res.json({
+      resumen: {
+        totalTickets: totalesRes.rows[0].total_tickets,
+        totalAbiertos,
+        totalCriticos,
+        totalClientes: totalesRes.rows[0].total_clientes,
+        totalUsuarios: totalesRes.rows[0].total_usuarios,
+        totalServicios: totalesRes.rows[0].total_servicios
+      },
+      porCliente: porClienteRes.rows,
+      porServicio: porServicioRes.rows,
+      productividadTecnico: productividadRes.rows
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;

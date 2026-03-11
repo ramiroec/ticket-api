@@ -92,4 +92,115 @@ router.get('/me', (req, res) => {
   res.json(user);
 });
 
+// Development credentials for admin (convenience)
+const DEV_ADMIN_EMAIL = process.env.DEV_ADMIN_EMAIL || 'admin@local';
+const DEV_ADMIN_PASSWORD = process.env.DEV_ADMIN_PASSWORD || 'devpass';
+
+// Admin login
+router.post('/admin/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+
+  // Development shortcut
+  if (
+    process.env.NODE_ENV === 'development' &&
+    email === DEV_ADMIN_EMAIL &&
+    password === DEV_ADMIN_PASSWORD
+  ) {
+    const adminUser = {
+      id: 0,
+      nombre: 'Admin Dev',
+      email: DEV_ADMIN_EMAIL,
+      rol: 'admin'
+    };
+    const token = createSession({ ...adminUser, tipo: 'admin' });
+    return res.json({ token, user: adminUser });
+  }
+
+  try {
+    // Para admin, verificar que sea un usuario con rol 'admin'
+    const { rows } = await pool.query(
+      'SELECT * FROM usuarios WHERE email = $1 AND rol = $2',
+      [email, 'admin']
+    );
+    if (!rows.length)
+      return res.status(404).json({ error: 'Administrador no encontrado' });
+
+    const user = rows[0];
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+    const token = createSession({
+      id: user.id,
+      nombre: user.nombre,
+      email: user.email,
+      rol: user.rol,
+      tipo: 'admin'
+    });
+    res.json({
+      token,
+      user: { id: user.id, nombre: user.nombre, email: user.email, rol: user.rol }
+    });
+  } catch (error) {
+    console.error('Error en login admin:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Actualizar usuario
+router.put('/:id', async (req, res) => {
+  const { nombre, email, rol } = req.body;
+  const updates = { nombre, email, rol };
+  const fields = Object.entries(updates)
+    .filter(([, value]) => value !== undefined)
+    .map(([key], idx) => `${key} = $${idx + 1}`);
+  const values = Object.values(updates).filter(v => v !== undefined);
+
+  if (!fields.length)
+    return res.status(400).json({ error: 'No hay campos para actualizar' });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE usuarios SET ${fields.join(', ')} WHERE id = $${fields.length + 1} RETURNING id, nombre, email, rol`,
+      [...values, req.params.id]
+    );
+
+    if (!rows.length)
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    if (error.code === '23505')
+      return res.status(409).json({ error: 'Ya existe otro usuario con ese email' });
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Eliminar usuario
+router.delete('/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'DELETE FROM usuarios WHERE id = $1 RETURNING id, nombre, email, rol',
+      [req.params.id]
+    );
+
+    if (!rows.length)
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    res.json({
+      mensaje: 'Usuario eliminado correctamente',
+      usuario: rows[0]
+    });
+  } catch (error) {
+    console.error('Error al eliminar usuario:', error);
+    if (error.code === '23503')
+      return res.status(409).json({
+        error: 'No se puede eliminar el usuario porque tiene registros asociados'
+      });
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 module.exports = router;
